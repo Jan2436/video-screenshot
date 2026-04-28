@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Video Screenshot & Speed Control",
+  "version": "1.1.0",
+  "description": "强制调节视频播放速度(0.1x-3x) + 原始分辨率帧截图下载，适配抖音/B站/YouTube等主流平台",
+  "permissions": ["activeTab", "scripting", "downloads"],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

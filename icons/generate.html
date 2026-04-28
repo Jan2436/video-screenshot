@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head><title>Icon Generator</title></head>
+<body>
+<h2>Icon Generator - 点击按钮生成并下载 PNG 图标</h2>
+<canvas id="c16" width="16" height="16"></canvas>
+<canvas id="c48" width="48" height="48"></canvas>
+<canvas id="c128" width="128" height="128"></canvas>
+<br><br>
+<button onclick="generate()">生成图标</button>
+<button onclick="download('c16','icon16.png')">下载 16x16</button>
+<button onclick="download('c48','icon48.png')">下载 48x48</button>
+<button onclick="download('c128','icon128.png')">下载 128x128</button>
+
+<script>
+function drawIcon(canvas) {
+  const ctx = canvas.getContext('2d');
+  const s = canvas.width;
+  const r = s * 0.18;
+
+  // Background
+  const grad = ctx.createLinearGradient(0, 0, s, s);
+  grad.addColorStop(0, '#0f3460');
+  grad.addColorStop(1, '#533483');
+  ctx.beginPath();
+  ctx.roundRect(0, 0, s, s, r);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Play triangle
+  ctx.beginPath();
+  ctx.moveTo(s*0.32, s*0.22);
+  ctx.lineTo(s*0.32, s*0.72);
+  ctx.lineTo(s*0.75, s*0.47);
+  ctx.closePath();
+  ctx.fillStyle = '#e94560';
+  ctx.fill();
+
+  // Speed text
+  ctx.fillStyle = '#7ec8e3';
+  ctx.font = `bold ${s*0.14}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.fillText('3x', s*0.5, s*0.38);
+
+  // Camera body
+  const camY = s*0.62;
+  const camH = s*0.26;
+  const camW = s*0.44;
+  const camX = s*0.28;
+  ctx.strokeStyle = '#4ecca3';
+  ctx.lineWidth = Math.max(1, s*0.02);
+  ctx.beginPath();
+  ctx.roundRect(camX, camY, camW, camH, s*0.03);
+  ctx.stroke();
+
+  // Camera lens
+  ctx.beginPath();
+  ctx.arc(s*0.5, camY + camH*0.55, s*0.07, 0, Math.PI*2);
+  ctx.stroke();
+
+  // Camera top
+  ctx.fillStyle = '#4ecca3';
+  ctx.beginPath();
+  ctx.roundRect(s*0.4, camY - s*0.04, s*0.2, s*0.05, s*0.02);
+  ctx.fill();
+}
+
+function generate() {
+  ['c16','c48','c128'].forEach(id => drawIcon(document.getElementById(id)));
+}
+
+function download(canvasId, filename) {
+  const canvas = document.getElementById(canvasId);
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+// Auto generate on load
+window.onload = generate;
+</script>
+</body>
+</html>
