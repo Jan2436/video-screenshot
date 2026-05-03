@@ -107,11 +107,31 @@
   function getDouyinActiveImage() {
     if (!location.hostname.includes('douyin.com')) return null;
     
-    // 寻找屏幕中最居中且比较大的图片
+    // 优先使用明确的 active 选择器（如果结构没变，这是最准确的）
+    const selectors = [
+      '.swiper-slide-active img',
+      '.swipe-item.active img',
+      '[data-e2e="slide-item"].swiper-slide-active img',
+      '.xgplayer-img-active img'
+    ];
+
+    for (const sel of selectors) {
+      const imgs = document.querySelectorAll(sel);
+      for (const img of imgs) {
+        const rect = img.getBoundingClientRect();
+        // 确保图片是可见且在视口内的
+        if (rect.width > 50 && rect.height > 50 &&
+            rect.bottom > 0 && rect.right > 0 &&
+            rect.top < window.innerHeight && rect.left < window.innerWidth) {
+            return img;
+        }
+      }
+    }
+
+    // fallback: 寻找屏幕中最居中且比较大的图片
     const imgs = Array.from(document.querySelectorAll('img')).filter(img => {
       const rect = img.getBoundingClientRect();
-      // 过滤掉小图标、头像等，假设图文主体至少比较大
-      return rect.width > 150 && rect.height > 150 &&
+      return rect.width > 100 && rect.height > 100 &&
              rect.bottom > 0 && rect.right > 0 &&
              rect.top < window.innerHeight && rect.left < window.innerWidth;
     });
@@ -122,14 +142,21 @@
     const centerX = window.innerWidth / 2;
 
     imgs.forEach(img => {
+      // 过滤掉背景大图（抖音经常用模糊全屏大图做背景）
+      const isBackground = img.style.filter.includes('blur') || img.className.includes('blur') || img.className.includes('bg');
+      if (isBackground) return;
+
       const rect = img.getBoundingClientRect();
+      // 如果图片占满了整个屏幕，可能也是背景图
+      if (rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9) return;
+
       const iCenterY = rect.top + rect.height / 2;
       const iCenterX = rect.left + rect.width / 2;
-      const dist = Math.pow(iCenterY - centerY, 2) + Math.pow(iCenterX - centerX, 2);
-      // 同时考虑图片大小，大图片优先级更高
-      const score = dist - (rect.width * rect.height * 0.01); 
-      if (score < minDistance) {
-        minDistance = score;
+      // 单纯以中心点距离为准，去掉面积加成，防止大面积背景图胜出
+      const dist = Math.abs(iCenterY - centerY) + Math.abs(iCenterX - centerX);
+      
+      if (dist < minDistance) {
+        minDistance = dist;
         bestImg = img;
       }
     });
@@ -148,7 +175,8 @@
       document.querySelector('[data-e2e="slide-list"]') ||
       document.querySelector('.swiper-container .swiper-slide img[data-e2e="slide-image"]') ||
       document.querySelector('.swiper-container .swiper-slide img[data-e2e="slide-img"]') ||
-      document.querySelector('.album-card-image')
+      document.querySelector('.album-card-image') ||
+      document.querySelector('.xgplayer-img')
     );
   }
 
