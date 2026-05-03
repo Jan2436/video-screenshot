@@ -68,34 +68,36 @@
     const videos = getAllVideos();
     if (!videos.length) return null;
 
-    // 优先返回正在播放且可见的视频（面积最大的）
-    const playing = videos.filter(v => !v.paused && v.offsetWidth > 0 && v.offsetHeight > 0);
-    if (playing.length > 0) {
-      return playing.reduce((a, b) => (a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b));
-    }
-
-    // 如果所有视频都暂停了（比如截图时用户按了暂停），则找最居中且可见的视频
-    const visibleVideos = videos.filter(v => v.offsetWidth > 0 && v.offsetHeight > 0);
-    if (visibleVideos.length === 0) return videos[0];
-
+    // 优先通过屏幕中心点计算最活跃的视频（解决抖音等上下滑动视频网站截图截到下一个的问题）
     let bestVideo = null;
     let minDistance = Infinity;
-    const centerY = window.innerHeight / 2;
-    const centerX = window.innerWidth / 2;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
 
-    visibleVideos.forEach(v => {
+    for (const v of videos) {
       const rect = v.getBoundingClientRect();
-      // 对于 iframe 内的视频，rect 可能是相对 iframe 的，这里做个简单计算
-      const vCenterY = rect.top + rect.height / 2;
-      const vCenterX = rect.left + rect.width / 2;
-      const dist = Math.pow(vCenterY - centerY, 2) + Math.pow(vCenterX - centerX, 2);
-      if (dist < minDistance) {
-        minDistance = dist;
+      if (rect.width === 0 || rect.height === 0) continue;
+      // 在视口外
+      if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) continue;
+
+      const elCx = rect.left + rect.width / 2;
+      const elCy = rect.top + rect.height / 2;
+      const distance = Math.pow(elCx - cx, 2) + Math.pow(elCy - cy, 2);
+
+      if (distance < minDistance) {
+        minDistance = distance;
         bestVideo = v;
       }
-    });
+    }
 
-    return bestVideo || visibleVideos.reduce((a, b) => (a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b));
+    if (bestVideo) return bestVideo;
+
+    // 兜底逻辑
+    const playing = videos.filter(v => !v.paused && v.offsetWidth > 0);
+    if (playing.length) return playing.reduce((a, b) => (a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b));
+    const visible = videos.filter(v => v.offsetWidth > 0);
+    if (visible.length) return visible.reduce((a, b) => (a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b));
+    return videos[0];
   }
 
   // ==================== 抖音图文模式图片检测 ====================
@@ -105,179 +107,89 @@
    * 抖音图文作品使用 Swiper 轮播，当前帧为 .swiper-slide-active
    */
   function getDouyinActiveImage() {
-    if (!location.hostname.includes('douyin.com')) return null;
-    
-    // 优先使用明确的 active 选择器（如果结构没变，这是最准确的）
-    const selectors = [
-      '.swiper-slide-active img',
-      '.swipe-item.active img',
-      '[data-e2e="slide-item"].swiper-slide-active img',
-      '.xgplayer-img-active img'
-    ];
+    // 抖音图文经常改变DOM结构，最稳妥的方法是寻找屏幕正中心最大的图片
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    let bestImg = null;
+    let minDistance = Infinity;
 
-    for (const sel of selectors) {
-      const imgs = document.querySelectorAll(sel);
-      for (const img of imgs) {
-        const rect = img.getBoundingClientRect();
-        // 确保图片是可见且在视口内的
-        if (rect.width > 50 && rect.height > 50 &&
-            rect.bottom > 0 && rect.right > 0 &&
-            rect.top < window.innerHeight && rect.left < window.innerWidth) {
-            return img;
-        }
+    // 查找所有图片，并在其包含图文特征的容器中匹配
+    const images = Array.from(document.querySelectorAll('img'));
+    
+    for (const img of images) {
+      const rect = img.getBoundingClientRect();
+      // 过滤太小的图标或头像
+      if (rect.width < 200 || rect.height < 200) continue;
+      // 过滤不在视口的
+      if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) continue;
+      
+      const elCx = rect.left + rect.width / 2;
+      const elCy = rect.top + rect.height / 2;
+      const distance = Math.pow(elCx - cx, 2) + Math.pow(elCy - cy, 2);
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        bestImg = img;
       }
     }
 
-    // fallback: 寻找屏幕中最居中且比较大的图片
-    const imgs = Array.from(document.querySelectorAll('img')).filter(img => {
-      const rect = img.getBoundingClientRect();
-      return rect.width > 100 && rect.height > 100 &&
-             rect.bottom > 0 && rect.right > 0 &&
-             rect.top < window.innerHeight && rect.left < window.innerWidth;
-    });
+    if (bestImg) return bestImg;
 
-    let bestImg = null;
-    let minDistance = Infinity;
-    const centerY = window.innerHeight / 2;
-    const centerX = window.innerWidth / 2;
+    // 兜底原来的选择器逻辑
+    const selectors = [
+      '.swiper-slide-active img[data-e2e="slide-image"]',
+      '.swiper-slide-active img[data-e2e="slide-img"]',
+      '.swiper-slide-active img',
+      '[data-e2e="slide-item"].swiper-slide-active img',
+      '.swiper-slide-active .album-card-image',
+      '.swipe-item.active img',
+      '[data-e2e="feed-detail-card"] .swipe-item.active img',
+    ];
 
-    imgs.forEach(img => {
-      // 过滤掉背景大图（抖音经常用模糊全屏大图做背景）
-      const isBackground = img.style.filter.includes('blur') || img.className.includes('blur') || img.className.includes('bg');
-      if (isBackground) return;
-
-      const rect = img.getBoundingClientRect();
-      // 如果图片占满了整个屏幕，可能也是背景图
-      if (rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9) return;
-
-      const iCenterY = rect.top + rect.height / 2;
-      const iCenterX = rect.left + rect.width / 2;
-      // 单纯以中心点距离为准，去掉面积加成，防止大面积背景图胜出
-      const dist = Math.abs(iCenterY - centerY) + Math.abs(iCenterX - centerX);
-      
-      if (dist < minDistance) {
-        minDistance = dist;
-        bestImg = img;
+    for (const sel of selectors) {
+      const img = document.querySelector(sel);
+      if (img && (img.src || img.dataset.src) && img.naturalWidth > 0) {
+        return img;
       }
-    });
-
-    return bestImg;
+    }
+    return null;
   }
 
   /**
    * 判断当前页面是否为抖音图文模式
    */
   function isDouyinImageMode() {
-    if (!location.hostname.includes('douyin.com')) return false;
-    // 检测是否包含图文模式特有的 DOM 结构
-    return !!(
-      document.querySelector('.swiper-container[data-e2e="slide-list"]') ||
+    const isDouyin = location.hostname.includes('douyin.com') || location.hostname.includes('iesdouyin.com');
+    if (!isDouyin) return false;
+    
+    // 检查是否有典型的图文特征
+    if (
+      document.querySelector('.swiper-container') ||
       document.querySelector('[data-e2e="slide-list"]') ||
-      document.querySelector('.swiper-container .swiper-slide img[data-e2e="slide-image"]') ||
-      document.querySelector('.swiper-container .swiper-slide img[data-e2e="slide-img"]') ||
-      document.querySelector('.album-card-image') ||
-      document.querySelector('.xgplayer-img')
-    );
+      document.querySelector('.swiper-slide') ||
+      document.querySelector('.album-card-image')
+    ) {
+      return true;
+    }
+    
+    // 如果没有视频但找到了大图，也认为是图文模式
+    const activeV = getActiveVideo();
+    if (!activeV) {
+      return !!getDouyinActiveImage();
+    }
+    
+    return false;
   }
 
   /**
    * 截取抖音图文当前图片（直接下载原图，无需 Canvas 转换）
    */
-  function captureDouyinImage(el) {
-    if (!el) return null;
-    let url = el.dataset.src || el.src;
-    let w = el.naturalWidth || el.clientWidth;
-    let h = el.naturalHeight || el.clientHeight;
-
-    if (!url && el.style.backgroundImage) {
-      const match = el.style.backgroundImage.match(/url\(['"]?(.*?)['"]?\)/);
-      if (match && match[1]) {
-        url = match[1];
-      }
-    }
-
-    if (!url) {
-      // 抖音有些时候图片放在了 xgplayer-img 的 style 中，而不是标签上
-      const bgImg = window.getComputedStyle(el).backgroundImage;
-      if (bgImg && bgImg !== 'none') {
-        const match = bgImg.match(/url\(['"]?(.*?)['"]?\)/);
-        if (match && match[1]) url = match[1];
-      }
-    }
-
+  function captureDouyinImage(img) {
+    if (!img) return null;
+    // 优先使用 data-src（懒加载原图），其次 src
+    const url = img.dataset.src || img.src;
     if (!url) return null;
-
-    // 清理 url
-    if (url.startsWith('//')) url = location.protocol + url;
-    
-    return { url, width: w, height: h };
-  }
-
-  function getDouyinActiveImage() {
-    if (!location.hostname.includes('douyin.com')) return null;
-    
-    // 优先使用明确的 active 选择器
-    const selectors = [
-      '.swiper-slide-active img',
-      '.swipe-item.active img',
-      '[data-e2e="slide-item"].swiper-slide-active img',
-      '.xgplayer-img-active img',
-      '.swiper-slide-active .album-card-image'
-    ];
-
-    for (const sel of selectors) {
-      const els = document.querySelectorAll(sel);
-      for (const el of els) {
-        const rect = el.getBoundingClientRect();
-        if (rect.width > 50 && rect.height > 50 &&
-            rect.bottom > 0 && rect.right > 0 &&
-            rect.top < window.innerHeight && rect.left < window.innerWidth) {
-            return el;
-        }
-      }
-    }
-
-    // fallback: 寻找屏幕中最居中且比较大的元素 (img 或 带有 background-image 的 div)
-    const elements = Array.from(document.querySelectorAll('img, div.swiper-slide, div.xgplayer-img')).filter(el => {
-      const rect = el.getBoundingClientRect();
-      return rect.width > 100 && rect.height > 100 &&
-             rect.bottom > 0 && rect.right > 0 &&
-             rect.top < window.innerHeight && rect.left < window.innerWidth;
-    });
-
-    let bestEl = null;
-    let minDistance = Infinity;
-    const centerY = window.innerHeight / 2;
-    const centerX = window.innerWidth / 2;
-
-    elements.forEach(el => {
-      // 尝试过滤掉明显的模糊背景
-      const style = window.getComputedStyle(el);
-      if (style.filter.includes('blur') || el.className.includes('blur')) return;
-
-      const rect = el.getBoundingClientRect();
-      if (rect.width >= window.innerWidth * 0.95 && rect.height >= window.innerHeight * 0.95) return;
-
-      const iCenterY = rect.top + rect.height / 2;
-      const iCenterX = rect.left + rect.width / 2;
-      const dist = Math.abs(iCenterY - centerY) + Math.abs(iCenterX - centerX);
-      
-      if (dist < minDistance) {
-        // 对于 div，必须确保有背景图或者是容器才能算候选
-        if (el.tagName !== 'IMG') {
-          const bg = style.backgroundImage;
-          const hasImgChild = el.querySelector('img');
-          if (!hasImgChild && (!bg || bg === 'none')) return;
-          // 如果有img child，它自己会在遍历中被选中，所以跳过这个div
-          if (hasImgChild) return;
-        }
-
-        minDistance = dist;
-        bestEl = el;
-      }
-    });
-
-    return bestEl;
+    return { url, width: img.naturalWidth, height: img.naturalHeight };
   }
 
   /**
@@ -542,21 +454,18 @@
     // ---- 截图 ----
     captureBtn.addEventListener('click', () => {
       // 优先检测抖音图文模式
-      if (isDouyinImageMode()) {
-        const douyinImg = getDouyinActiveImage();
-        if (douyinImg) {
-          const result = captureDouyinImage(douyinImg);
-          if (result) {
-            const now = new Date();
-            const pad = n => String(n).padStart(2, '0');
-            const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-            downloadImageByUrl(result.url, `screenshot_douyin_img_${ts}.png`);
-            updateStatus(`已保存图片 ${result.width}×${result.height}`);
-            return;
-          }
+      const douyinImg = getDouyinActiveImage();
+      if (douyinImg) {
+        const result = captureDouyinImage(douyinImg);
+        if (result) {
+          const now = new Date();
+          const pad = n => String(n).padStart(2, '0');
+          const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+          downloadImageByUrl(result.url, `screenshot_douyin_img_${ts}.png`);
+          updateStatus(`已保存图片 ${result.width}×${result.height}`);
+          return;
         }
       }
-      
       // 其次检测视频
       const video = getActiveVideo();
       if (!video) { updateStatus('未检测到视频/图片', true); return; }
@@ -758,20 +667,17 @@
       e.preventDefault();
       e.stopPropagation();
       // 优先检测抖音图文模式
-      if (isDouyinImageMode()) {
-        const douyinImg = getDouyinActiveImage();
-        if (douyinImg) {
-          const result = captureDouyinImage(douyinImg);
-          if (result) {
-            const now = new Date();
-            const pad = n => String(n).padStart(2, '0');
-            const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-            downloadImageByUrl(result.url, `screenshot_douyin_img_${ts}.png`);
-          }
-          return;
+      const douyinImg = getDouyinActiveImage();
+      if (douyinImg) {
+        const result = captureDouyinImage(douyinImg);
+        if (result) {
+          const now = new Date();
+          const pad = n => String(n).padStart(2, '0');
+          const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+          downloadImageByUrl(result.url, `screenshot_douyin_img_${ts}.png`);
         }
+        return;
       }
-      
       // 其次检测视频
       const video = getActiveVideo();
       if (video) {

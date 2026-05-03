@@ -1,35 +1,19 @@
-# Video Screenshot Extension
+# Video Screenshot & Speed Controller
 
-A browser extension to control video playback speed and capture high-quality screenshots from HTML5 videos and Douyin (TikTok) photo mode.
+一个功能强大的浏览器插件，支持控制网页视频播放速度，并提供高精度的视频截图功能。
 
-## Features
+## 最新更新
+- 修复了抖音网页版上下滑动视频时，截图定位到下一个视频（不可见视频）的问题。通过计算视口中心距离，准确捕捉当前正在观看的视频。
+- 增强了抖音图文模式的检测与截图功能。通过视窗中心最大图片的智能匹配，完美支持提取并下载抖音图文视频中的当前图片。
 
-*   **Video Speed Control:** Adjust playback speed from 0.1x to 3.0x using a slider or preset buttons.
-*   **Video Screenshot:** Capture the current frame of any playing HTML5 video.
-*   **Douyin Photo Mode Support:** Extracts and downloads the current active high-resolution image from Douyin's photo/image mode.
-*   **Floating Panel:** A convenient draggable and resizable panel to control speed and take screenshots.
-*   **Keyboard Shortcut:** Press `Shift + S` to quickly capture a screenshot of the current video or image.
-*   **Smart Detection:** Automatically finds the most prominent video or image in the viewport for accurate capturing.
+## 功能特性
+- 支持任何网页的 HTML5 视频播放速度控制
+- 一键视频截图（支持 PNG, JPEG, WebP）
+- 抖音图文模式原图提取下载
+- 全局快捷键支持：使用 `Shift + S` 快速截取当前视频/图片
 
-## Installation
-
-1. Clone or download this repository.
-2. Open your Chromium-based browser (Chrome, Edge, etc.) and go to the extensions page (e.g., `chrome://extensions/`).
-3. Enable "Developer mode".
-4. Click "Load unpacked" and select the directory containing the extension files.
-
-## Usage
-
-*   Click the extension icon in the toolbar to toggle the floating control panel.
-*   Use the slider or preset buttons in the panel to change video speed.
-*   Click the "截取当前帧" (Capture Current Frame) button in the panel or press `Shift + S` to save a screenshot.
-*   You can choose between PNG, JPEG, and WebP formats in the panel.
-
-## Recent Updates
-
-*   **Fixed:** Improved target selection for screenshots on Douyin, ensuring the current visible video is captured rather than the next off-screen video.
-*   **Enhanced:** Re-wrote Douyin photo mode detection to robustly identify and capture the currently viewed image by analyzing viewport position and element dimensions.
-
-## License
-
-MIT License
+## 安装方式
+1. 下载源码并解压
+2. 打开 Chrome / Edge 扩展程序页面 (`chrome://extensions/` 或 `edge://extensions/`)
+3. 开启右上角的“开发者模式”
+4. 点击“加载已解压的扩展程序”，选择源码所在目录
