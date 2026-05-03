@@ -68,39 +68,40 @@
     const videos = getAllVideos();
     if (!videos.length) return null;
 
-    const cx = window.innerWidth / 2;
-    const cy = window.innerHeight / 2;
-
-    // 过滤出在视口内且尺寸正常的视频
+    // 先过滤出尺寸正常、并非完全隐藏的可见视频
     const visibleVideos = videos.filter(v => {
       const rect = v.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return false;
       if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) return false;
-      // 过滤掉隐藏的视频
       const style = window.getComputedStyle(v);
       if (style.opacity === '0' || style.visibility === 'hidden') return false;
       return true;
     });
 
-    if (visibleVideos.length === 0) {
-      // 兜底逻辑
-      const playing = videos.filter(v => !v.paused && v.offsetWidth > 0);
-      if (playing.length) return playing.reduce((a, b) => (a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b));
-      return videos.find(v => v.offsetWidth > 0) || videos[0];
+    const targetVideos = visibleVideos.length > 0 ? visibleVideos : videos;
+
+    // 综合 douyin-enhancer 的逻辑：优先考虑 readyState >= 2 (HAVE_CURRENT_DATA) 的视频
+    const readyVideos = targetVideos.filter(v => v.readyState >= 2);
+    const candidatesToUse = readyVideos.length > 0 ? readyVideos : targetVideos;
+
+    // 按优先级分组
+    // 1. 正在播放的
+    let candidates = candidatesToUse.filter(v => !v.paused);
+    // 2. 暂停但进度大于 0 的 (用户可能暂停了准备截图)
+    if (candidates.length === 0) {
+      candidates = candidatesToUse.filter(v => v.currentTime > 0);
+    }
+    // 3. 都不是
+    if (candidates.length === 0) {
+      candidates = candidatesToUse;
     }
 
-    // 按优先级分组：
-    // 1. 正在播放的视频
-    // 2. 暂停但进度大于 0 的视频 (可能是用户暂停了准备截图)
-    // 3. 其他可见视频 (比如预加载的)
-    let candidates = visibleVideos.filter(v => !v.paused);
-    if (candidates.length === 0) {
-      candidates = visibleVideos.filter(v => v.currentTime > 0);
-    }
-    if (candidates.length === 0) {
-      candidates = visibleVideos;
-    }
+    // 如果只有一个候选视频，直接返回
+    if (candidates.length === 1) return candidates[0];
 
+    // 如果有多个候选者，结合中心点距离和 currentTime 进行打分
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
     let bestVideo = null;
     let minDistance = Infinity;
 
@@ -110,13 +111,18 @@
       const elCy = rect.top + rect.height / 2;
       const distance = Math.pow(elCx - cx, 2) + Math.pow(elCy - cy, 2);
 
-      if (distance < minDistance) {
+      // 如果距离非常接近（比如层叠的视频），优先取 currentTime 更大的
+      if (distance < minDistance - 10) {
         minDistance = distance;
         bestVideo = v;
+      } else if (Math.abs(distance - minDistance) <= 10) {
+        if (bestVideo && v.currentTime > bestVideo.currentTime) {
+          bestVideo = v;
+        }
       }
     }
 
-    return bestVideo || visibleVideos[0];
+    return bestVideo || candidates[0];
   }
 
   // ==================== 抖音图文模式图片检测 ====================
