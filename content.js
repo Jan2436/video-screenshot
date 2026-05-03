@@ -183,12 +183,101 @@
   /**
    * 截取抖音图文当前图片（直接下载原图，无需 Canvas 转换）
    */
-  function captureDouyinImage(img) {
-    if (!img) return null;
-    // 优先使用 data-src（懒加载原图），其次 src
-    const url = img.dataset.src || img.src;
+  function captureDouyinImage(el) {
+    if (!el) return null;
+    let url = el.dataset.src || el.src;
+    let w = el.naturalWidth || el.clientWidth;
+    let h = el.naturalHeight || el.clientHeight;
+
+    if (!url && el.style.backgroundImage) {
+      const match = el.style.backgroundImage.match(/url\(['"]?(.*?)['"]?\)/);
+      if (match && match[1]) {
+        url = match[1];
+      }
+    }
+
+    if (!url) {
+      // 抖音有些时候图片放在了 xgplayer-img 的 style 中，而不是标签上
+      const bgImg = window.getComputedStyle(el).backgroundImage;
+      if (bgImg && bgImg !== 'none') {
+        const match = bgImg.match(/url\(['"]?(.*?)['"]?\)/);
+        if (match && match[1]) url = match[1];
+      }
+    }
+
     if (!url) return null;
-    return { url, width: img.naturalWidth, height: img.naturalHeight };
+
+    // 清理 url
+    if (url.startsWith('//')) url = location.protocol + url;
+    
+    return { url, width: w, height: h };
+  }
+
+  function getDouyinActiveImage() {
+    if (!location.hostname.includes('douyin.com')) return null;
+    
+    // 优先使用明确的 active 选择器
+    const selectors = [
+      '.swiper-slide-active img',
+      '.swipe-item.active img',
+      '[data-e2e="slide-item"].swiper-slide-active img',
+      '.xgplayer-img-active img',
+      '.swiper-slide-active .album-card-image'
+    ];
+
+    for (const sel of selectors) {
+      const els = document.querySelectorAll(sel);
+      for (const el of els) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 50 && rect.height > 50 &&
+            rect.bottom > 0 && rect.right > 0 &&
+            rect.top < window.innerHeight && rect.left < window.innerWidth) {
+            return el;
+        }
+      }
+    }
+
+    // fallback: 寻找屏幕中最居中且比较大的元素 (img 或 带有 background-image 的 div)
+    const elements = Array.from(document.querySelectorAll('img, div.swiper-slide, div.xgplayer-img')).filter(el => {
+      const rect = el.getBoundingClientRect();
+      return rect.width > 100 && rect.height > 100 &&
+             rect.bottom > 0 && rect.right > 0 &&
+             rect.top < window.innerHeight && rect.left < window.innerWidth;
+    });
+
+    let bestEl = null;
+    let minDistance = Infinity;
+    const centerY = window.innerHeight / 2;
+    const centerX = window.innerWidth / 2;
+
+    elements.forEach(el => {
+      // 尝试过滤掉明显的模糊背景
+      const style = window.getComputedStyle(el);
+      if (style.filter.includes('blur') || el.className.includes('blur')) return;
+
+      const rect = el.getBoundingClientRect();
+      if (rect.width >= window.innerWidth * 0.95 && rect.height >= window.innerHeight * 0.95) return;
+
+      const iCenterY = rect.top + rect.height / 2;
+      const iCenterX = rect.left + rect.width / 2;
+      const dist = Math.abs(iCenterY - centerY) + Math.abs(iCenterX - centerX);
+      
+      if (dist < minDistance) {
+        // 对于 div，必须确保有背景图或者是容器才能算候选
+        if (el.tagName !== 'IMG') {
+          const bg = style.backgroundImage;
+          const hasImgChild = el.querySelector('img');
+          if (!hasImgChild && (!bg || bg === 'none')) return;
+          // 如果有img child，它自己会在遍历中被选中，所以跳过这个div
+          if (hasImgChild) return;
+        }
+
+        minDistance = dist;
+        bestEl = el;
+      }
+    });
+
+    return bestEl;
   }
 
   /**
