@@ -67,11 +67,34 @@
   function getActiveVideo() {
     const videos = getAllVideos();
     if (!videos.length) return null;
-    const playing = videos.filter(v => !v.paused && v.offsetWidth > 0);
-    if (playing.length) return playing.reduce((a, b) => (a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b));
-    const visible = videos.filter(v => v.offsetWidth > 0);
-    if (visible.length) return visible.reduce((a, b) => (a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b));
-    return videos[0];
+
+    const visibleVideos = videos.filter(v => {
+      const rect = v.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 &&
+             rect.bottom > 0 && rect.right > 0 &&
+             rect.top < window.innerHeight && rect.left < window.innerWidth;
+    });
+
+    if (visibleVideos.length === 0) return videos[0];
+
+    // Find the video closest to the center of the viewport
+    let bestVideo = null;
+    let minDistance = Infinity;
+    const centerY = window.innerHeight / 2;
+    const centerX = window.innerWidth / 2;
+
+    visibleVideos.forEach(v => {
+      const rect = v.getBoundingClientRect();
+      const vCenterY = rect.top + rect.height / 2;
+      const vCenterX = rect.left + rect.width / 2;
+      const dist = Math.pow(vCenterY - centerY, 2) + Math.pow(vCenterX - centerX, 2);
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestVideo = v;
+      }
+    });
+
+    return bestVideo || visibleVideos[0];
   }
 
   // ==================== 抖音图文模式图片检测 ====================
@@ -81,38 +104,41 @@
    * 抖音图文作品使用 Swiper 轮播，当前帧为 .swiper-slide-active
    */
   function getDouyinActiveImage() {
-    // 优先使用 data-e2e 属性（最稳定）
-    const selectors = [
-      '.swiper-slide-active img[data-e2e="slide-image"]',
-      '.swiper-slide-active img[data-e2e="slide-img"]',
-      '.swiper-slide-active img',
-      '[data-e2e="slide-item"].swiper-slide-active img',
-      // 备用：通过 active 标记查找
-      '.swiper-slide-active .album-card-image',
-      // 详情页结构
-      '.swipe-item.active img',
-      '[data-e2e="feed-detail-card"] .swipe-item.active img',
-    ];
+    // 寻找屏幕中最居中且比较大的图片
+    const imgs = Array.from(document.querySelectorAll('img')).filter(img => {
+      const rect = img.getBoundingClientRect();
+      // 过滤掉小图标、头像等，假设图文主体至少比较大
+      return rect.width > 150 && rect.height > 150 &&
+             rect.bottom > 0 && rect.right > 0 &&
+             rect.top < window.innerHeight && rect.left < window.innerWidth;
+    });
 
-    for (const sel of selectors) {
-      const img = document.querySelector(sel);
-      if (img && (img.src || img.dataset.src) && img.naturalWidth > 0) {
-        return img;
+    let bestImg = null;
+    let minDistance = Infinity;
+    const centerY = window.innerHeight / 2;
+    const centerX = window.innerWidth / 2;
+
+    imgs.forEach(img => {
+      const rect = img.getBoundingClientRect();
+      const iCenterY = rect.top + rect.height / 2;
+      const iCenterX = rect.left + rect.width / 2;
+      const dist = Math.pow(iCenterY - centerY, 2) + Math.pow(iCenterX - centerX, 2);
+      // 同时考虑图片大小，大图片优先级更高
+      const score = dist - (rect.width * rect.height * 0.01); 
+      if (score < minDistance) {
+        minDistance = score;
+        bestImg = img;
       }
-    }
-    return null;
+    });
+
+    return bestImg;
   }
 
   /**
    * 判断当前页面是否为抖音图文模式
    */
   function isDouyinImageMode() {
-    return !!(
-      document.querySelector('.swiper-container[data-e2e="slide-list"]') ||
-      document.querySelector('[data-e2e="slide-list"]') ||
-      document.querySelector('.swiper-container .swiper-slide img[data-e2e="slide-image"]') ||
-      document.querySelector('.swiper-container .swiper-slide img[data-e2e="slide-img"]')
-    );
+    return location.hostname.includes('douyin.com') && !!getDouyinActiveImage();
   }
 
   /**
