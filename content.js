@@ -68,18 +68,44 @@
     const videos = getAllVideos();
     if (!videos.length) return null;
 
-    // 优先通过屏幕中心点计算最活跃的视频（解决抖音等上下滑动视频网站截图截到下一个的问题）
-    let bestVideo = null;
-    let minDistance = Infinity;
     const cx = window.innerWidth / 2;
     const cy = window.innerHeight / 2;
 
-    for (const v of videos) {
+    // 过滤出在视口内且尺寸正常的视频
+    const visibleVideos = videos.filter(v => {
       const rect = v.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) continue;
-      // 在视口外
-      if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) continue;
+      if (rect.width === 0 || rect.height === 0) return false;
+      if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) return false;
+      // 过滤掉隐藏的视频
+      const style = window.getComputedStyle(v);
+      if (style.opacity === '0' || style.visibility === 'hidden') return false;
+      return true;
+    });
 
+    if (visibleVideos.length === 0) {
+      // 兜底逻辑
+      const playing = videos.filter(v => !v.paused && v.offsetWidth > 0);
+      if (playing.length) return playing.reduce((a, b) => (a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b));
+      return videos.find(v => v.offsetWidth > 0) || videos[0];
+    }
+
+    // 按优先级分组：
+    // 1. 正在播放的视频
+    // 2. 暂停但进度大于 0 的视频 (可能是用户暂停了准备截图)
+    // 3. 其他可见视频 (比如预加载的)
+    let candidates = visibleVideos.filter(v => !v.paused);
+    if (candidates.length === 0) {
+      candidates = visibleVideos.filter(v => v.currentTime > 0);
+    }
+    if (candidates.length === 0) {
+      candidates = visibleVideos;
+    }
+
+    let bestVideo = null;
+    let minDistance = Infinity;
+
+    for (const v of candidates) {
+      const rect = v.getBoundingClientRect();
       const elCx = rect.left + rect.width / 2;
       const elCy = rect.top + rect.height / 2;
       const distance = Math.pow(elCx - cx, 2) + Math.pow(elCy - cy, 2);
@@ -90,14 +116,7 @@
       }
     }
 
-    if (bestVideo) return bestVideo;
-
-    // 兜底逻辑
-    const playing = videos.filter(v => !v.paused && v.offsetWidth > 0);
-    if (playing.length) return playing.reduce((a, b) => (a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b));
-    const visible = videos.filter(v => v.offsetWidth > 0);
-    if (visible.length) return visible.reduce((a, b) => (a.videoWidth * a.videoHeight > b.videoWidth * b.videoHeight ? a : b));
-    return videos[0];
+    return bestVideo || visibleVideos[0];
   }
 
   // ==================== 抖音图文模式图片检测 ====================
