@@ -67,10 +67,37 @@
   function getActiveVideo() {
     const isDouyin = location.hostname.includes('douyin.com') || location.hostname.includes('iesdouyin.com');
 
-    // 如果是抖音，完全同步 douyin-enhancer 的逻辑
     if (isDouyin) {
-      // douyin-enhancer 直接取 DOM 中第一个 readyState >= 2 的 video
-      const dyVideo = [...document.querySelectorAll('video')].find(v => v.readyState >= 2);
+      // 1. 寻找明确带有 active/playing 类的容器内的 video（最准确）
+      const activeSelectors = [
+        '.swiper-slide-active video',
+        '.xgplayer-playing video',
+        '[data-e2e="feed-active-video"] video',
+        '.is-active video',
+        '.xgplayer-pause video' // 涵盖用户手动暂停的情况
+      ];
+      
+      for (const sel of activeSelectors) {
+        const els = document.querySelectorAll(sel);
+        for (const v of els) {
+          if (v && v.readyState >= 2) return v;
+        }
+      }
+      
+      // 2. 如果没找到，寻找页面上真正在播放的视频
+      const videos = Array.from(document.querySelectorAll('video'));
+      const playing = videos.find(v => !v.paused && v.readyState >= 2);
+      if (playing) return playing;
+
+      // 3. 寻找播放进度最大的视频（排除预加载但还没播过的第一帧视频）
+      const playedVideos = videos.filter(v => v.readyState >= 2 && v.currentTime > 0);
+      if (playedVideos.length > 0) {
+        playedVideos.sort((a, b) => b.currentTime - a.currentTime);
+        return playedVideos[0];
+      }
+
+      // 4. 兜底 douyin-enhancer 逻辑
+      const dyVideo = videos.find(v => v.readyState >= 2);
       if (dyVideo) return dyVideo;
     }
 
